@@ -1,208 +1,65 @@
-<!DOCTYPE html>
-<html lang="zh-TW">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jasper 智慧媒合系統 (黑金版)</title>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+// --- 僅節錄並修改核心邏輯部分，其餘黑金介面與 Config 保持不變 ---
+
+function acceptOrder(id, dist) {
+    if(dist > 5 && !confirm(`此乘客距離您 ${dist}km 較遠，確定要搶單嗎？`)) return;
     
-    <style>
-        /* --- 原有黑金視覺設計 --- */
-        body { background-color: #121212; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; padding-bottom: 20px; }
-        h2 { margin: 0; padding: 20px; text-align: center; background: #1e1e1e; color: #00e676; border-bottom: 1px solid #333; font-size: 20px; letter-spacing: 1px; }
-        
-        .container { padding: 20px; max-width: 600px; margin: 0 auto; }
-        .card { background: #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        
-        /* 角色切換按鈕 */
-        .role-switcher { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn-role { flex: 1; padding: 15px; border: 1px solid #444; background: #2c2c2c; color: #fff; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
-        .btn-role.active { background: #00e676; color: #000; border-color: #00e676; }
-
-        /* 輸入與通用按鈕 */
-        label { color: #00e676; font-size: 14px; font-weight: bold; margin-bottom: 8px; display: block; }
-        input { width: 100%; padding: 14px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; font-size: 16px; margin-bottom: 15px; box-sizing: border-box; outline: none; }
-        input:focus { border-color: #00e676; }
-        .btn-main { width: 100%; padding: 16px; background: linear-gradient(135deg, #00e676, #00c853); color: #000; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.2s; }
-        .btn-main:active { transform: scale(0.98); }
-
-        /* 聊天區塊 */
-        #chat-section { display: none; }
-        #chat-box { height: 300px; overflow-y: auto; background: #121212; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
-        
-        .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; }
-        .msg-driver { align-self: flex-end; background: #00e676; color: #000; border-bottom-right-radius: 2px; }
-        .msg-passenger { align-self: flex-start; background: #333; color: #fff; border-bottom-left-radius: 2px; }
-        
-        .chat-input-group { display: flex; gap: 10px; }
-        .btn-send { width: 80px; background: #2979ff; border: none; color: white; border-radius: 8px; font-weight: bold; }
-
-        /* 搶單閃爍效果 */
-        .order-card { border-left: 5px solid #00e676; }
-        .btn-grab { background: #ff5252; color: white; border: none; padding: 10px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-    </style>
-</head>
-<body>
-
-    <h2>🚕 Jasper 智慧媒合系統</h2>
-
-    <div class="container">
-        <div id="role-selection" class="role-switcher">
-            <button class="btn-role" onclick="setRole('passenger')">我是乘客 (發單)</button>
-            <button class="btn-role" onclick="setRole('driver')">我是司機 (搶單)</button>
-        </div>
-
-        <div id="passenger-ui" style="display:none;">
-            <div class="card">
-                <label>📍 起點</label>
-                <input type="text" id="start-point" placeholder="例如：新莊區昌平街326號">
-                <label>🏁 目的地</label>
-                <input type="text" id="end-point" placeholder="例如：桃園機場第二航廈">
-                <button class="btn-main" onclick="postOrder()">發送搶單需求</button>
-            </div>
-        </div>
-
-        <div id="driver-ui" style="display:none;">
-            <h3 style="color:#888; font-size:14px; margin-bottom:10px;">📡 即時搶單雷達 (全區)</h3>
-            <div id="order-list">
-                <div style="text-align:center; padding:20px; color:#555;">等待訂單中...</div>
-            </div>
-        </div>
-
-        <div id="chat-section">
-            <div class="card">
-                <label>💬 即時對話 (後台監控中)</label>
-                <div id="chat-box"></div>
-                <div class="chat-input-group">
-                    <input type="text" id="chat-input" placeholder="輸入訊息..." style="margin-bottom:0;">
-                    <button class="btn-send" onclick="sendMessage()">發送</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // --- Firebase 配置 ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyDqUA1Y2odbb51AN-MtE4bRLcz_cRm2A68",
-            authDomain: "jasper-taxi.firebaseapp.com",
-            projectId: "jasper-taxi",
-            storageBucket: "jasper-taxi.firebasestorage.app",
-            messagingSenderId: "558407272439",
-            appId: "1:558407272439:web:e48abaae404530a75c90f2",
-            measurementId: "G-X8HP1JRZYN",
-            databaseURL: "https://jasper-taxi-default-rtdb.asia-southeast1.firebasedatabase.app"
-        };
-
-        firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
-        let currentRole = '';
-        let activeOrderId = null;
-
-        function setRole(role) {
-            currentRole = role;
-            document.querySelectorAll('.btn-role').forEach(btn => btn.classList.remove('active'));
-            event.target.classList.add('active');
+    db.ref('orders/' + id).transaction(order => {
+        if(order && order.status === 'waiting') {
+            order.status = 'accepted';
+            order.dLat = userLat; 
+            order.dLon = userLon; // 記錄司機當前位置
+            return order;
+        }
+    }, (err, committed) => {
+        if(committed) { 
+            activeOrderId = id; 
+            listenForChat(id); 
             
-            document.getElementById('passenger-ui').style.display = role === 'passenger' ? 'block' : 'none';
-            document.getElementById('driver-ui').style.display = role === 'driver' ? 'block' : 'none';
-            
-            if(role === 'driver') listenForOrders();
+            // --- 新增：自動發送系統警示訊息 ---
+            if(dist > 5) {
+                const sysMsg = `⚠️ 系統提示：司機距離較遠 (${dist}km)，請雙方確認預計抵達時間。`;
+                db.ref('messages/' + id).push({
+                    role: 'system', // 以系統身分發言
+                    text: sysMsg,
+                    time: Date.now()
+                });
+            }
         }
+    });
+}
 
-        function postOrder() {
-            const start = document.getElementById('start-point').value;
-            const end = document.getElementById('end-point').value;
-            if(!start || !end) return alert("請填寫起訖地點");
-
-            const newOrderRef = db.ref('orders').push();
-            activeOrderId = newOrderRef.key;
-            newOrderRef.set({
-                start: start,
-                end: end,
-                status: 'waiting',
-                createTime: Date.now()
-            });
-            
-            alert("訂單已發送，請等待司機搶單...");
-            listenForChat(activeOrderId);
+// 修改監聽對話的顯示邏輯，增加系統訊息樣式
+function listenForChat(orderId) {
+    document.getElementById('chat-section').style.display = 'block';
+    
+    // 監聽訂單狀態並顯示乘客端警示框
+    db.ref('orders/' + orderId).on('value', snap => {
+        const o = snap.val();
+        if(o.status === 'accepted' && o.dLat && o.pLat) {
+            const d = calcDist(o.pLat, o.pLon, o.dLat, o.dLon).toFixed(1);
+            const alertBox = document.getElementById('dist-alert-p');
+            if(d > 5) alertBox.innerHTML = `<div class="dist-warning">⚠️ 司機距離較遠 (${d}km)</div>`;
+            else alertBox.innerHTML = `<div style="color:#00e676; text-align:center; margin-bottom:10px;">🚕 司機距離約 ${d}km</div>`;
         }
+    });
 
-        function listenForOrders() {
-            db.ref('orders').on('value', (snapshot) => {
-                const orders = snapshot.val();
-                const listDiv = document.getElementById('order-list');
-                listDiv.innerHTML = '';
-
-                let hasOrder = false;
-                for(let id in orders) {
-                    if(orders[id].status === 'waiting') {
-                        hasOrder = true;
-                        const item = document.createElement('div');
-                        item.className = 'card order-card';
-                        item.innerHTML = `
-                            <div style="margin-bottom:10px;">
-                                <div style="font-size:12px; color:#888;">新單提醒</div>
-                                <div style="margin:5px 0;">📍 ${orders[id].start}</div>
-                                <div style="margin:5px 0;">🏁 ${orders[id].end}</div>
-                            </div>
-                            <button class="btn-grab" onclick="acceptOrder('${id}')">立即搶單</button>
-                        `;
-                        listDiv.appendChild(item);
-                    }
-                }
-                if(!hasOrder) listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#555;">目前沒有待接單</div>';
-            });
+    db.ref('messages/' + orderId).on('value', snap => {
+        const msgs = snap.val();
+        const box = document.getElementById('chat-box');
+        box.innerHTML = '';
+        for(let m in msgs) {
+            const mData = msgs[m];
+            const div = document.createElement('div');
+            // 根據不同身分套用樣式
+            if(mData.role === 'system') {
+                div.style = "align-self:center; background:#444; color:#ffeb3b; font-size:12px; padding:5px 10px; border-radius:5px; margin:5px 0;";
+                div.innerText = mData.text;
+            } else {
+                div.className = `msg msg-${mData.role}`;
+                div.innerText = mData.text;
+            }
+            box.appendChild(div);
         }
-
-        function acceptOrder(id) {
-            db.ref('orders/' + id).transaction((order) => {
-                if (order && order.status === 'waiting') {
-                    order.status = 'accepted';
-                    return order;
-                }
-                return; 
-            }, (error, committed) => {
-                if (committed) {
-                    activeOrderId = id;
-                    alert("搶單成功！請開始對話");
-                    listenForChat(id);
-                } else {
-                    alert("訂單已被搶走囉！");
-                }
-            });
-        }
-
-        function listenForChat(orderId) {
-            document.getElementById('chat-section').style.display = 'block';
-            
-            db.ref('messages/' + orderId).on('value', (snapshot) => {
-                const msgs = snapshot.val();
-                const box = document.getElementById('chat-box');
-                box.innerHTML = '';
-                for(let mId in msgs) {
-                    const div = document.createElement('div');
-                    const roleClass = msgs[mId].role === 'driver' ? 'msg-driver' : 'msg-passenger';
-                    div.className = `msg ${roleClass}`;
-                    div.innerText = msgs[mId].text;
-                    box.appendChild(div);
-                }
-                box.scrollTop = box.scrollHeight;
-            });
-        }
-
-        function sendMessage() {
-            const text = document.getElementById('chat-input').value;
-            if(!text || !activeOrderId) return;
-
-            db.ref('messages/' + activeOrderId).push({
-                role: currentRole,
-                text: text,
-                time: Date.now()
-            });
-            document.getElementById('chat-input').value = '';
-        }
-    </script>
-</body>
-</html>
+        box.scrollTop = box.scrollHeight;
+    });
+}
