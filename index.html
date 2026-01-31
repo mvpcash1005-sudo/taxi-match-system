@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jasper 智慧媒合系統 - 釋放訂單版</title>
+    <title>Jasper 智慧媒合系統 - 紀錄保存版</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
@@ -16,12 +16,13 @@
         input { width: 100%; padding: 14px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
         .btn-main { width: 100%; padding: 18px; background: #00e676; color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 18px; }
         .btn-reject { width: 100%; padding: 12px; background: #ff5252; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .dist-warning { background: #ff5252; color: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; }
+        .history-title { color: #888; font-size: 14px; margin: 20px 0 10px; border-left: 3px solid #00e676; padding-left: 10px; }
         #chat-box { height: 250px; overflow-y: auto; background: #121212; border: 1px solid #333; padding: 15px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
-        .msg { max-width: 80%; padding: 10px; border-radius: 10px; font-size: 14px; }
+        .msg { max-width: 80%; padding: 10px; border-radius: 10px; font-size: 14px; word-break: break-all; }
         .msg-driver { align-self: flex-end; background: #00e676; color: #000; }
         .msg-passenger { align-self: flex-start; background: #333; color: #fff; }
-        .msg-system { align-self: center; background: #444; color: #ffeb3b; font-size: 12px; padding: 5px 10px; border-radius: 5px; text-align: center; }
+        .msg-system { align-self: center; background: #444; color: #ffeb3b; font-size: 11px; padding: 4px 10px; border-radius: 5px; }
+        .order-history-item { font-size: 13px; color: #bbb; border-bottom: 1px solid #333; padding: 10px 0; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -30,8 +31,8 @@
 
     <div class="container">
         <div style="display:flex; gap:10px; margin-bottom:20px;">
-            <button class="btn-role" id="btn-p" onclick="setRole('passenger')">我是乘客 (發單)</button>
-            <button class="btn-role" id="btn-d" onclick="setRole('driver')">我是司機 (搶單)</button>
+            <button class="btn-role" id="btn-p" onclick="selectRole('passenger')">我是乘客</button>
+            <button class="btn-role" id="btn-d" onclick="selectRole('driver')">我是司機</button>
         </div>
 
         <div id="passenger-ui" style="display:none;">
@@ -41,22 +42,26 @@
                 <input type="text" id="p-end" placeholder="🏁 目的地">
                 <button class="btn-main" onclick="postOrder()">發送搶單需求</button>
             </div>
+            <div class="history-title">📅 歷史叫車紀錄</div>
+            <div id="p-history-list"></div>
         </div>
 
         <div id="driver-ui" style="display:none;">
             <div id="order-list"><div style="text-align:center; color:#555; padding:20px;">搜尋全區訂單中...</div></div>
+            <div class="history-title">📋 已接訂單紀錄</div>
+            <div id="d-history-list"></div>
         </div>
 
         <div id="chat-section" style="display:none;">
             <div id="p-cancel-control" style="display:none;">
-                <button class="btn-reject" onclick="rejectDriver()">司機太遠了，重新開放搶單</button>
-                <p style="color:#888; font-size:12px; text-align:center; margin-top:5px;">* 按下後目前司機將取消接單，訂單重新回到列表</p>
+                <button class="btn-reject" onclick="rejectDriver()">司機太遠，重新開放搶單</button>
             </div>
+            <button onclick="closeChat()" style="background:#444; color:#fff; width:100%; border:none; padding:8px; margin-bottom:10px; border-radius:5px;">⬅️ 返回列表</button>
             <div class="card">
                 <div id="chat-box"></div>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="chat-input" placeholder="輸入訊息..." style="margin-bottom:0;">
-                    <button style="background:#2979ff; border:none; color:white; border-radius:8px; padding:0 20px; font-weight:bold;" onclick="sendMessage()">發送</button>
+                    <button style="background:#2979ff; border:none; color:white; border-radius:8px; padding:0 20px;" onclick="sendMessage()">發送</button>
                 </div>
             </div>
         </div>
@@ -76,24 +81,35 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
+        
+        // 生成或讀取固定用戶 ID，確保紀錄連動
+        let userId = localStorage.getItem('jasper_user_id') || 'u' + Date.now();
+        localStorage.setItem('jasper_user_id', userId);
+
         let currentRole = '', activeOrderId = null, userLat = null, userLon = null;
 
-        function updateLocation() {
-            navigator.geolocation.getCurrentPosition(pos => {
-                userLat = pos.coords.latitude;
-                userLon = pos.coords.longitude;
-            }, err => console.log("等待定位..."), { enableHighAccuracy: true });
-        }
-        setInterval(updateLocation, 5000);
-        updateLocation();
+        navigator.geolocation.getCurrentPosition(pos => {
+            userLat = pos.coords.latitude; userLon = pos.coords.longitude;
+        }, null, { enableHighAccuracy: true });
 
-        function setRole(role) {
+        // 初始化檢查：是否有未完成的訂單
+        window.onload = () => {
+            const savedRole = localStorage.getItem('jasper_last_role');
+            const savedOrderId = localStorage.getItem('jasper_active_order');
+            if(savedRole) selectRole(savedRole);
+            if(savedOrderId) loadActiveOrder(savedOrderId);
+        };
+
+        function selectRole(role) {
             currentRole = role;
+            localStorage.setItem('jasper_last_role', role);
             document.querySelectorAll('.btn-role').forEach(b => b.classList.remove('active'));
             document.getElementById(role === 'passenger' ? 'btn-p' : 'btn-d').classList.add('active');
             document.getElementById('passenger-ui').style.display = role === 'passenger' ? 'block' : 'none';
             document.getElementById('driver-ui').style.display = role === 'driver' ? 'block' : 'none';
+            document.getElementById('chat-section').style.display = 'none';
             if(role === 'driver') listenForOrders();
+            renderHistory();
         }
 
         function calcDist(lat1, lon1, lat2, lon2) {
@@ -109,9 +125,9 @@
             const end = document.getElementById('p-end').value;
             if(!start || !end) return alert("請填寫起訖點");
             const newRef = db.ref('orders').push();
-            activeOrderId = newRef.key;
-            newRef.set({ start, end, status: 'waiting', pLat: userLat, pLon: userLon, createTime: Date.now() });
-            listenForChat(activeOrderId);
+            const orderId = newRef.key;
+            newRef.set({ start, end, status: 'waiting', pId: userId, pLat: userLat, pLon: userLon, createTime: Date.now() });
+            loadActiveOrder(orderId);
         }
 
         function listenForOrders() {
@@ -119,64 +135,52 @@
                 const orders = snap.val();
                 const list = document.getElementById('order-list');
                 list.innerHTML = '';
-                let hasOrder = false;
                 for(let id in orders) {
                     if(orders[id].status === 'waiting') {
-                        hasOrder = true;
                         const dist = (userLat && orders[id].pLat) ? calcDist(userLat, userLon, orders[id].pLat, orders[id].pLon).toFixed(1) : "?";
-                        list.innerHTML += `
-                            <div class="card">
-                                <div style="color:#00e676; font-size:12px; margin-bottom:5px;">📏 距離您約 ${dist} km</div>
-                                📍 ${orders[id].start}<br>🏁 ${orders[id].end}
-                                <button class="btn-main" style="margin-top:15px;" onclick="acceptOrder('${id}', '${dist}')">立即搶單</button>
-                            </div>`;
+                        list.innerHTML += `<div class="card">📏 距離: ${dist} km<br>📍 ${orders[id].start}<br>🏁 ${orders[id].end}<br><button class="btn-main" style="margin-top:10px;" onclick="acceptOrder('${id}')">搶單</button></div>`;
                     }
                 }
-                if(!hasOrder) list.innerHTML = '<div style="text-align:center; color:#555; padding:20px;">目前沒有待接單</div>';
             });
         }
 
-        function acceptOrder(id, dist) {
+        function acceptOrder(id) {
             db.ref('orders/' + id).transaction(order => {
                 if(order && order.status === 'waiting') {
                     order.status = 'accepted';
-                    order.dLat = userLat; order.dLon = userLon;
+                    order.dId = userId; order.dLat = userLat; order.dLon = userLon;
                     return order;
                 }
             }, (err, committed) => {
-                if(committed) { 
-                    activeOrderId = id; 
-                    listenForChat(id); 
-                    if(dist !== "?" && parseFloat(dist) > 5) {
-                        db.ref('messages/' + id).push({ role: 'system', text: `⚠️ 系統提示：司機距離較遠 (${dist}km)，請確認抵達時間。`, time: Date.now() });
-                    }
-                } else {
-                    alert("手慢了！");
-                }
+                if(committed) loadActiveOrder(id);
+                else alert("手慢了！");
             });
         }
 
-        function listenForChat(orderId) {
+        function loadActiveOrder(orderId) {
+            activeOrderId = orderId;
+            localStorage.setItem('jasper_active_order', orderId);
+            document.getElementById('passenger-ui').style.display = 'none';
+            document.getElementById('driver-ui').style.display = 'none';
             document.getElementById('chat-section').style.display = 'block';
+            listenForChat(orderId);
+        }
+
+        function closeChat() {
+            localStorage.removeItem('jasper_active_order');
+            activeOrderId = null;
+            selectRole(currentRole);
+        }
+
+        function listenForChat(orderId) {
             db.ref('orders/' + orderId).on('value', snap => {
                 const o = snap.val();
                 if(!o) return;
-                
-                // 處理被乘客退貨的情況：回到等待狀態
-                if(o.status === 'waiting' && currentRole === 'driver' && activeOrderId === orderId) {
-                    alert("乘客因距離問題已取消您的接單，訂單重新開放中。");
-                    activeOrderId = null;
-                    document.getElementById('chat-section').style.display = 'none';
-                    return;
-                }
-
+                // 距離警示與自動控制
                 if(o.status === 'accepted' && o.dLat && o.pLat) {
                     const d = calcDist(o.pLat, o.pLon, o.dLat, o.dLon).toFixed(1);
                     if(currentRole === 'passenger') {
-                        document.getElementById('p-cancel-control').style.display = (d > 5 || d === "?") ? 'block' : 'none';
-                        const alertBox = document.getElementById('dist-alert-p');
-                        if(d > 5) alertBox.innerHTML = `<div class="dist-warning">⚠️ 司機距離較遠 (${d}km)</div>`;
-                        else alertBox.innerHTML = `<div style="color:#00e676; text-align:center; margin-bottom:10px;">🚕 司機趕往中 (${d}km)</div>`;
+                        document.getElementById('p-cancel-control').style.display = (d > 5) ? 'block' : 'none';
                     }
                 }
             });
@@ -186,38 +190,13 @@
                 const box = document.getElementById('chat-box');
                 box.innerHTML = '';
                 for(let m in msgs) {
-                    const msgData = msgs[m];
+                    const msg = msgs[m];
                     const div = document.createElement('div');
-                    if(msgData.role === 'system') {
-                        div.className = 'msg-system';
-                        div.innerText = msgData.text;
-                    } else {
-                        div.className = `msg ${msgData.role === 'driver' ? 'msg-driver' : 'msg-passenger'}`;
-                        div.innerText = msgData.text;
-                    }
+                    div.className = msg.role === 'system' ? 'msg-system' : `msg msg-${msg.role}`;
+                    div.innerText = msg.text;
                     box.appendChild(div);
                 }
                 box.scrollTop = box.scrollHeight;
-            });
-        }
-
-        // 新增：釋放訂單功能
-        function rejectDriver() {
-            if(!confirm("確定要取消目前司機，重新開放其他司機搶單嗎？")) return;
-            
-            db.ref('messages/' + activeOrderId).push({
-                role: 'system',
-                text: "❌ 乘客已取消目前司機接單，原因：距離太遠，訂單已重新開放。",
-                time: Date.now()
-            });
-
-            db.ref('orders/' + activeOrderId).update({
-                status: 'waiting',
-                dLat: null,
-                dLon: null
-            }).then(() => {
-                alert("已釋放訂單，請等待其他近處司機搶單。");
-                document.getElementById('p-cancel-control').style.display = 'none';
             });
         }
 
@@ -227,6 +206,31 @@
                 db.ref('messages/' + activeOrderId).push({ role: currentRole, text: text, time: Date.now() });
                 document.getElementById('chat-input').value = '';
             }
+        }
+
+        function renderHistory() {
+            db.ref('orders').once('value', snap => {
+                const orders = snap.val();
+                const pList = document.getElementById('p-history-list');
+                const dList = document.getElementById('d-history-list');
+                pList.innerHTML = ''; dList.innerHTML = '';
+                
+                for(let id in orders) {
+                    const o = orders[id];
+                    const time = new Date(o.createTime).toLocaleString();
+                    const item = `<div class="order-history-item" onclick="loadActiveOrder('${id}')">🕒 ${time}<br>📍 ${o.start} ➔ ${o.end} (${o.status})</div>`;
+                    
+                    if(o.pId === userId) pList.innerHTML += item;
+                    if(o.dId === userId) dList.innerHTML += item;
+                }
+            });
+        }
+
+        function rejectDriver() {
+            if(!confirm("重新開放搶單？")) return;
+            db.ref('messages/' + activeOrderId).push({ role: 'system', text: "乘客重新開放搶單。", time: Date.now() });
+            db.ref('orders/' + activeOrderId).update({ status: 'waiting', dId: null, dLat: null });
+            closeChat();
         }
     </script>
 </body>
