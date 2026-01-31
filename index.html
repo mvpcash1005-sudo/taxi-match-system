@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jasper 智慧媒合系統 - 開發者金流核實版</title>
+    <title>Jasper 智慧媒合系統 - 安全密碼控管版</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
         body { background-color: #121212; color: #e0e0e0; font-family: -apple-system, sans-serif; margin: 0; padding-bottom: 20px; }
-        .header { padding: 20px; text-align: center; background: #1e1e1e; color: #00e676; border-bottom: 1px solid #333; cursor: pointer; }
+        .header { padding: 20px; text-align: center; background: #1e1e1e; color: #00e676; border-bottom: 1px solid #333; cursor: pointer; user-select: none; }
         .container { padding: 20px; max-width: 600px; margin: 0 auto; }
         .card { background: #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid #333; }
         .btn-role { flex: 1; padding: 15px; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 8px; cursor: pointer; font-weight: bold; }
         .btn-role.active { background: #00e676; color: #000; }
-        input, select { width: 100%; padding: 14px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
+        input { width: 100%; padding: 14px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
         .btn-main { width: 100%; padding: 18px; background: #00e676; color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        .btn-admin { background: #2979ff; color: white; padding: 5px 10px; border-radius: 5px; font-size: 12px; cursor: pointer; margin-top: 5px; }
-        .payment-info { background: #004d40; color: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; }
-        .upload-img { width: 100%; border-radius: 8px; margin-top: 10px; border: 1px solid #444; }
-        #chat-box { height: 200px; overflow-y: auto; background: #000; padding: 15px; margin-bottom: 10px; border-radius: 8px; }
+        .admin-box { display: none; border: 2px solid #00e676; padding: 15px; border-radius: 10px; background: #000; margin-bottom: 20px; }
+        .payment-info { background: #004d40; color: #fff; padding: 15px; border-radius: 8px; margin-bottom: 15px; font-size: 14px; border: 1px solid #00e676; }
+        #chat-box { height: 200px; overflow-y: auto; background: #000; padding: 15px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; }
     </style>
 </head>
 <body>
 
-    <div class="header" onclick="triggerAdmin()">🚕 Jasper 智慧媒合系統 (開發者端)</div>
+    <div class="header" onclick="triggerAdmin()">🚕 Jasper 智慧媒合系統 (開發者)</div>
 
     <div class="container">
-        <div id="admin-ui" style="display:none; border: 2px solid #00e676; padding: 15px; border-radius: 10px; background: #000; margin-bottom: 20px;">
-            <h3 style="color:#00e676;">⚡ 管理員對帳與撥款中心</h3>
+        <div id="admin-ui" class="admin-box">
+            <h3 style="color:#00e676;">🔒 開發者對帳與權限中心</h3>
             <div id="admin-order-list"></div>
             <button onclick="document.getElementById('admin-ui').style.display='none'" style="width:100%; background:#444; color:#fff; border:none; padding:10px; border-radius:5px;">關閉控制台</button>
         </div>
@@ -42,44 +41,40 @@
                 <h3 style="color:#00e676;">司機實名與收款認證</h3>
                 <input type="text" id="d-name" placeholder="全名">
                 <input type="text" id="d-car" placeholder="車牌">
-                <input type="text" id="d-bank" placeholder="國泰銀行帳號">
-                <input type="text" id="d-jkopay" placeholder="街口支付帳號">
-                <label style="font-size:12px; color:#888;">執業證照上傳</label>
+                <input type="text" id="d-bank" placeholder="國泰世華(013) 帳號">
+                <input type="text" id="d-jko" placeholder="街口支付(396) 帳號">
                 <input type="file" id="d-img" accept="image/*">
                 <button class="btn-main" onclick="saveDriverProfile()">儲存並接單</button>
             </div>
 
             <div id="passenger-ui" style="display:none;">
                 <div class="payment-info">
-                    <b>💰 官方匯款帳號 (請完成支付後發單)</b><br>
+                    <b>💰 官方匯款帳號 (Jasper 指定)</b><br>
                     國泰世華(013): 125506256272<br>
-                    街口支付(396): 909191462
+                    街口支付(396): 909191462<br>
+                    <small>* 請於下單後 10 分鐘內完成匯款以利對帳</small>
                 </div>
                 <div class="card">
                     <input type="text" id="p-start" placeholder="📍 起點">
                     <input type="text" id="p-end" placeholder="🏁 目的地">
-                    <button class="btn-main" onclick="postOrder()">發送叫車並通知開發者對帳</button>
+                    <button class="btn-main" onclick="postOrder()">發送叫車 (待開發者對帳)</button>
                 </div>
             </div>
 
-            <div id="driver-ui" style="display:none;">
-                <div id="order-list">搜尋中...</div>
-            </div>
+            <div id="driver-ui" style="display:none;"><div id="order-list">等待對帳單...</div></div>
 
             <div id="chat-section" style="display:none;">
-                <div id="status-display" class="card" style="border-color:#00e676; text-align:center;"></div>
-                
+                <div id="status-display" class="card" style="text-align:center; color:#00e676; font-weight:bold;"></div>
                 <div id="p-verify-box" class="card" style="display:none;">
-                    <label>📸 上車核實：請拍下車牌與時間</label>
+                    <label>📸 上車照片核實 (拍車牌與時間)</label>
                     <input type="file" id="p-verify-img" accept="image/*" capture="camera">
-                    <button class="btn-main" onclick="passengerVerify()">確認上車回傳照片</button>
+                    <button class="btn-main" onclick="passengerVerify()">確認上車回傳</button>
                 </div>
-
-                <button onclick="closeChat()" style="background:#444; color:#fff; width:100%; border:none; padding:10px; border-radius:8px; margin-bottom:10px;">⬅️ 返回列表</button>
+                <button onclick="closeChat()" style="background:#444; color:#fff; width:100%; border:none; padding:10px; border-radius:8px; margin-bottom:10px;">⬅️ 返回</button>
                 <div class="card">
                     <div id="chat-box"></div>
                     <div style="display:flex; gap:10px;">
-                        <input type="text" id="chat-input" placeholder="對話...">
+                        <input type="text" id="chat-input" placeholder="訊息...">
                         <button style="background:#2979ff; border:none; color:white; border-radius:8px; padding:0 15px;" onclick="sendMessage()">發送</button>
                     </div>
                 </div>
@@ -102,66 +97,74 @@
         const db = firebase.database();
         let userId = localStorage.getItem('jasper_user_id') || 'u' + Date.now();
         localStorage.setItem('jasper_user_id', userId);
+
         let currentRole = '', activeOrderId = null, clickCount = 0;
+        const ADMIN_PASS = "Jasper888"; // <--- 您可以在此修改密碼
 
         function triggerAdmin() {
             clickCount++;
-            if(clickCount >= 5) { document.getElementById('admin-ui').style.display = 'block'; listenAdmin(); clickCount = 0; }
+            if(clickCount >= 5) {
+                const pass = prompt("請輸入管理員授權密碼：");
+                if(pass === ADMIN_PASS) {
+                    document.getElementById('admin-ui').style.display = 'block';
+                    listenAdmin();
+                } else {
+                    alert("權限不足，密碼錯誤！");
+                }
+                clickCount = 0;
+            }
         }
 
+        // 管理員對帳與撥款邏輯
         function listenAdmin() {
             db.ref('orders').on('value', snap => {
-                const list = document.getElementById('admin-order-list');
-                list.innerHTML = '';
+                const list = document.getElementById('admin-order-list'); list.innerHTML = '';
                 snap.forEach(child => {
                     const o = child.val();
                     list.innerHTML += `
-                        <div class="card" style="font-size:12px;">
+                        <div class="card" style="font-size:12px; border-left: 4px solid #00e676;">
                             <b>狀態:</b> ${o.status}<br>
-                            <b>司機資訊:</b> ${o.dName || '未接單'} (${o.dBank || '無帳號'})<br>
-                            ${o.status === 'waiting' ? `<button class="btn-admin" onclick="adminConfirmPay('${child.key}')">✅ 收到乘客匯款，開放接單</button>` : ''}
-                            ${o.status === 'finished' ? `<button class="btn-admin" style="background:#4caf50;" onclick="adminSettle('${child.key}')">💰 已撥款司機，結案</button>` : ''}
-                            <button class="btn-admin" style="background:#ff5252;" onclick="adminDelete('${child.key}')">刪除</button>
+                            <b>司機:</b> ${o.dName || '無'} (${o.dBank || '未填'})<br>
+                            <b>路徑:</b> ${o.start} ➔ ${o.end}<br>
+                            ${o.status === 'waiting' ? `<button onclick="adminAction('${child.key}', 'pay_confirmed')" style="background:#00e676; padding:5px; border:none; border-radius:3px;">✅ 乘客已匯款</button>` : ''}
+                            ${o.status === 'finished' ? `<button onclick="adminAction('${child.key}', 'settled')" style="background:#2979ff; color:white; padding:5px; border:none; border-radius:3px;">💰 撥款給司機</button>` : ''}
+                            <button onclick="adminDelete('${child.key}')" style="background:#ff5252; color:white; padding:5px; border:none; border-radius:3px; margin-left:5px;">刪除</button>
                         </div>`;
                 });
             });
         }
 
-        function adminConfirmPay(id) { db.ref('orders/' + id).update({ status: 'pay_confirmed' }); alert("已確認收款，現在司機可以看到此單並前往。"); }
-        function adminDelete(id) { if(confirm("確定刪除？")) db.ref('orders/' + id).remove(); }
+        function adminAction(id, newStatus) { db.ref('orders/' + id).update({ status: newStatus }); alert("操作成功！"); }
+        function adminDelete(id) { if(confirm("刪除？")) db.ref('orders/' + id).remove(); }
 
+        // 其餘通訊與身分邏輯保持與前一版本一致，確保完整性
         function selectRole(role) {
             currentRole = role;
-            if(role === 'driver' && !localStorage.getItem('driver_profile')) {
-                document.getElementById('driver-register').style.display = 'block';
-                document.getElementById('passenger-ui').style.display = 'none';
-                return;
-            }
-            document.getElementById('driver-register').style.display = 'none';
-            document.getElementById('passenger-ui').style.display = role === 'passenger' ? 'block' : 'none';
-            document.getElementById('driver-ui').style.display = role === 'driver' ? 'block' : 'none';
-            if(role === 'driver') listenOrders();
+            const profile = localStorage.getItem('driver_profile');
+            if(role === 'driver' && !profile) { document.getElementById('driver-register').style.display='block'; document.getElementById('passenger-ui').style.display='none'; return; }
+            document.getElementById('driver-register').style.display='none';
+            document.getElementById('passenger-ui').style.display= role==='passenger'?'block':'none';
+            document.getElementById('driver-ui').style.display= role==='driver'?'block':'none';
+            if(role==='driver') listenOrders();
         }
 
         function saveDriverProfile() {
             const name = document.getElementById('d-name').value, car = document.getElementById('d-car').value;
-            const bank = document.getElementById('d-bank').value, jko = document.getElementById('d-jkopay').value;
+            const bank = document.getElementById('d-bank').value, jko = document.getElementById('d-jko').value;
             const file = document.getElementById('d-img').files[0];
-            if(!name || !car || !file || !bank) return alert("資訊不全");
-            const reader = new FileReader();
-            reader.onload = (e) => {
+            if(!name || !car || !file || !bank) return alert("請完整填寫姓名、車牌、銀行與照片");
+            const reader = new FileReader(); reader.onload = (e) => {
                 localStorage.setItem('driver_profile', JSON.stringify({name, car, bank, jko, img: e.target.result}));
                 selectRole('driver');
-            };
-            reader.readAsDataURL(file);
+            }; reader.readAsDataURL(file);
         }
 
         function postOrder() {
-            const start = document.getElementById('p-start').value, end = document.getElementById('p-end').value;
-            if(!start || !end) return alert("地點必填");
+            const s = document.getElementById('p-start').value, e = document.getElementById('p-end').value;
+            if(!s || !e) return alert("地點必填");
             const ref = db.ref('orders').push();
             activeOrderId = ref.key;
-            ref.set({ start, end, status: 'waiting', pId: userId, createTime: Date.now() });
+            ref.set({ start: s, end: e, status: 'waiting', pId: userId, createTime: Date.now() });
             loadOrder(activeOrderId);
         }
 
@@ -170,67 +173,60 @@
                 const list = document.getElementById('order-list'); list.innerHTML = '';
                 snap.forEach(child => {
                     const o = child.val();
-                    // 只有管理員確認付款後，司機才看得到這筆單
                     if(o.status === 'pay_confirmed') {
-                        list.innerHTML += `<div class="card">📍 ${o.start} ➔ ${o.end}<br><button class="btn-main" onclick="acceptOrder('${child.key}')">搶單 (已確認入帳)</button></div>`;
+                        list.innerHTML += `<div class="card">📍 ${o.start} ➔ ${o.end}<br><button class="btn-main" onclick="acceptOrder('${child.key}')">已對帳，我要搶單</button></div>`;
                     }
                 });
             });
         }
 
         function acceptOrder(id) {
-            const profile = JSON.parse(localStorage.getItem('driver_profile'));
+            const p = JSON.parse(localStorage.getItem('driver_profile'));
             db.ref('orders/' + id).transaction(order => {
                 if(order && order.status === 'pay_confirmed') {
-                    order.status = 'accepted';
-                    order.dId = userId; order.dName = profile.name; order.dCar = profile.car;
-                    order.dBank = profile.bank; order.dJko = profile.jko;
+                    order.status = 'accepted'; order.dId = userId; order.dName = p.name; order.dCar = p.car; order.dBank = p.bank; order.dJko = p.jko;
                     return order;
                 }
             }, (err, committed) => { if(committed) loadOrder(id); });
         }
 
         function loadOrder(id) {
-            activeOrderId = id;
-            document.getElementById('main-flow').style.display = 'none';
-            document.getElementById('chat-section').style.display = 'block';
+            activeOrderId = id; document.getElementById('main-flow').style.display='none'; document.getElementById('chat-section').style.display='block';
             listenChat(id);
         }
 
         function listenChat(id) {
             db.ref('orders/' + id).on('value', snap => {
                 const o = snap.val(); if(!o) return;
-                const display = document.getElementById('status-display');
-                display.innerText = `目前狀態：${o.status}`;
-                
-                // 乘客上車核實邏輯
-                if(o.status === 'accepted' && currentRole === 'passenger') {
-                    document.getElementById('p-verify-box').style.display = 'block';
-                } else {
-                    document.getElementById('p-verify-box').style.display = 'none';
-                }
-                
-                // 司機完成行程邏輯
+                document.getElementById('status-display').innerText = `【系統狀態：${o.status}】`;
+                if(o.status === 'accepted' && currentRole === 'passenger') document.getElementById('p-verify-box').style.display = 'block';
+                else document.getElementById('p-verify-box').style.display = 'none';
                 if(o.status === 'verified' && currentRole === 'driver') {
-                    display.innerHTML += `<br><button class="btn-main" onclick="driverFinish()">我已送達客人，回傳行程結束</button>`;
+                    document.getElementById('status-display').innerHTML += `<br><button class="btn-main" onclick="finishOrder()">抵達目的地 (結束行程)</button>`;
                 }
             });
-            // (通訊部分保持原邏輯)
+            db.ref('messages/' + id).on('value', snap => {
+                const box = document.getElementById('chat-box'); box.innerHTML = '';
+                snap.forEach(m => { const d = m.val(); box.innerHTML += `<div style="margin-bottom:8px; text-align:${d.role==='driver'?'right':'left'}"><span style="background:${d.role==='driver'?'#00e676':'#333'}; padding:5px; border-radius:5px; color:${d.role==='driver'?'#000':'#fff'}">${d.text}</span></div>`; });
+                box.scrollTop = box.scrollHeight;
+            });
         }
 
         function passengerVerify() {
-            const file = document.getElementById('p-verify-img').files[0];
-            if(!file) return alert("請拍下車牌");
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                db.ref('orders/' + activeOrderId).update({ status: 'verified', pVerifyImg: e.target.result,上車時間: Date.now() });
+            const f = document.getElementById('p-verify-img').files[0];
+            if(!f) return alert("拍照才具法律與對帳效益");
+            const r = new FileReader(); r.onload = (e) => {
+                db.ref('orders/' + activeOrderId).update({ status: 'verified', pImg: e.target.result,上車時間: Date.now() });
                 alert("已上傳核實照片！");
-            };
-            reader.readAsDataURL(file);
+            }; r.readAsDataURL(f);
         }
 
-        function driverFinish() { db.ref('orders/' + activeOrderId).update({ status: 'finished', 下車時間: Date.now() }); alert("行程結束，等待開發者匯款。"); }
-        function sendMessage() { /* 保持通訊邏輯 */ }
+        function finishOrder() { db.ref('orders/' + activeOrderId).update({ status: 'finished', 下車時間: Date.now() }); alert("行程結束，開發者將核對並撥款。"); }
+        function sendMessage() {
+            const t = document.getElementById('chat-input').value;
+            if(t) { db.ref('messages/' + activeOrderId).push({ role: currentRole, text: t, time: Date.now() }); document.getElementById('chat-input').value = ''; }
+        }
+        function closeChat() { document.getElementById('main-flow').style.display='block'; document.getElementById('chat-section').style.display='none'; }
     </script>
 </body>
 </html>
