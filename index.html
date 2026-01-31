@@ -3,26 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jasper 智慧媒合系統 - 紀錄保存版</title>
+    <title>Jasper 智慧媒合系統 - 高效同步版</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
         body { background-color: #121212; color: #e0e0e0; font-family: -apple-system, sans-serif; margin: 0; padding: 0; }
         h2 { padding: 20px; text-align: center; background: #1e1e1e; color: #00e676; border-bottom: 1px solid #333; margin:0; }
         .container { padding: 20px; max-width: 600px; margin: 0 auto; }
-        .card { background: #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .card { background: #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3); position: relative; }
         .btn-role { flex: 1; padding: 15px; background: #2c2c2c; color: #fff; border: 1px solid #444; border-radius: 8px; cursor: pointer; font-weight: bold; }
         .btn-role.active { background: #00e676; color: #000; }
         input { width: 100%; padding: 14px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; margin-bottom: 15px; box-sizing: border-box; }
         .btn-main { width: 100%; padding: 18px; background: #00e676; color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 18px; }
         .btn-reject { width: 100%; padding: 12px; background: #ff5252; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
-        .history-title { color: #888; font-size: 14px; margin: 20px 0 10px; border-left: 3px solid #00e676; padding-left: 10px; }
+        .time-badge { position: absolute; top: 10px; right: 10px; font-size: 11px; color: #00e676; font-family: monospace; }
+        .status-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-bottom: 5px; }
+        .tag-waiting { background: #ff9800; color: #000; }
+        .tag-accepted { background: #2196f3; color: #fff; }
         #chat-box { height: 250px; overflow-y: auto; background: #121212; border: 1px solid #333; padding: 15px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
         .msg { max-width: 80%; padding: 10px; border-radius: 10px; font-size: 14px; word-break: break-all; }
         .msg-driver { align-self: flex-end; background: #00e676; color: #000; }
         .msg-passenger { align-self: flex-start; background: #333; color: #fff; }
-        .msg-system { align-self: center; background: #444; color: #ffeb3b; font-size: 11px; padding: 4px 10px; border-radius: 5px; }
-        .order-history-item { font-size: 13px; color: #bbb; border-bottom: 1px solid #333; padding: 10px 0; cursor: pointer; }
+        .msg-system { align-self: center; background: #444; color: #ffeb3b; font-size: 11px; padding: 4px 10px; border-radius: 5px; text-align: center; }
+        .history-item { font-size: 13px; color: #bbb; border-bottom: 1px solid #333; padding: 10px 0; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -42,26 +45,27 @@
                 <input type="text" id="p-end" placeholder="🏁 目的地">
                 <button class="btn-main" onclick="postOrder()">發送搶單需求</button>
             </div>
-            <div class="history-title">📅 歷史叫車紀錄</div>
+            <div style="color: #888; font-size: 14px; margin-top:20px;">📅 歷史紀錄</div>
             <div id="p-history-list"></div>
         </div>
 
         <div id="driver-ui" style="display:none;">
-            <div id="order-list"><div style="text-align:center; color:#555; padding:20px;">搜尋全區訂單中...</div></div>
-            <div class="history-title">📋 已接訂單紀錄</div>
+            <div style="font-size: 12px; color: #888; margin-bottom:10px;">📡 即時訂單清單</div>
+            <div id="order-list"></div>
+            <div style="color: #888; font-size: 14px; margin-top:20px;">📋 已接訂單紀錄</div>
             <div id="d-history-list"></div>
         </div>
 
         <div id="chat-section" style="display:none;">
             <div id="p-cancel-control" style="display:none;">
-                <button class="btn-reject" onclick="rejectDriver()">司機太遠，重新開放搶單</button>
+                <button class="btn-reject" onclick="rejectDriver()">❌ 司機太遠/不合適，重新發單</button>
             </div>
-            <button onclick="closeChat()" style="background:#444; color:#fff; width:100%; border:none; padding:8px; margin-bottom:10px; border-radius:5px;">⬅️ 返回列表</button>
+            <button onclick="closeChat()" style="background:#444; color:#fff; width:100%; border:none; padding:10px; border-radius:8px; margin-bottom:10px;">⬅️ 返回列表</button>
             <div class="card">
                 <div id="chat-box"></div>
                 <div style="display:flex; gap:10px;">
                     <input type="text" id="chat-input" placeholder="輸入訊息..." style="margin-bottom:0;">
-                    <button style="background:#2979ff; border:none; color:white; border-radius:8px; padding:0 20px;" onclick="sendMessage()">發送</button>
+                    <button style="background:#2979ff; border:none; color:white; border-radius:8px; padding:0 20px; font-weight:bold;" onclick="sendMessage()">發送</button>
                 </div>
             </div>
         </div>
@@ -81,8 +85,6 @@
 
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
-        
-        // 生成或讀取固定用戶 ID，確保紀錄連動
         let userId = localStorage.getItem('jasper_user_id') || 'u' + Date.now();
         localStorage.setItem('jasper_user_id', userId);
 
@@ -92,7 +94,6 @@
             userLat = pos.coords.latitude; userLon = pos.coords.longitude;
         }, null, { enableHighAccuracy: true });
 
-        // 初始化檢查：是否有未完成的訂單
         window.onload = () => {
             const savedRole = localStorage.getItem('jasper_last_role');
             const savedOrderId = localStorage.getItem('jasper_active_order');
@@ -123,7 +124,7 @@
         function postOrder() {
             const start = document.getElementById('p-start').value;
             const end = document.getElementById('p-end').value;
-            if(!start || !end) return alert("請填寫起訖點");
+            if(!start || !end) return alert("請輸入完整資訊");
             const newRef = db.ref('orders').push();
             const orderId = newRef.key;
             newRef.set({ start, end, status: 'waiting', pId: userId, pLat: userLat, pLon: userLon, createTime: Date.now() });
@@ -136,9 +137,18 @@
                 const list = document.getElementById('order-list');
                 list.innerHTML = '';
                 for(let id in orders) {
-                    if(orders[id].status === 'waiting') {
-                        const dist = (userLat && orders[id].pLat) ? calcDist(userLat, userLon, orders[id].pLat, orders[id].pLon).toFixed(1) : "?";
-                        list.innerHTML += `<div class="card">📏 距離: ${dist} km<br>📍 ${orders[id].start}<br>🏁 ${orders[id].end}<br><button class="btn-main" style="margin-top:10px;" onclick="acceptOrder('${id}')">搶單</button></div>`;
+                    const o = orders[id];
+                    if(o.status === 'waiting') {
+                        const dist = (userLat && o.pLat) ? calcDist(userLat, userLon, o.pLat, o.pLon).toFixed(1) : "?";
+                        const timeStr = new Date(o.createTime).toLocaleTimeString();
+                        list.innerHTML += `
+                            <div class="card">
+                                <span class="time-badge">🕒 ${timeStr}</span>
+                                <span class="status-tag tag-waiting">等待中</span><br>
+                                📏 距離: ${dist} km<br>
+                                📍 ${o.start} ➔ ${o.end}<br>
+                                <button class="btn-main" style="margin-top:10px;" onclick="acceptOrder('${id}')">搶單</button>
+                            </div>`;
                     }
                 }
             });
@@ -152,8 +162,10 @@
                     return order;
                 }
             }, (err, committed) => {
-                if(committed) loadActiveOrder(id);
-                else alert("手慢了！");
+                if(committed) {
+                    db.ref('messages/' + id).push({ role: 'system', text: "司機已接單，對話開始。", time: Date.now() });
+                    loadActiveOrder(id);
+                } else alert("已被搶走！");
             });
         }
 
@@ -166,22 +178,20 @@
             listenForChat(orderId);
         }
 
-        function closeChat() {
-            localStorage.removeItem('jasper_active_order');
-            activeOrderId = null;
-            selectRole(currentRole);
-        }
-
         function listenForChat(orderId) {
             db.ref('orders/' + orderId).on('value', snap => {
                 const o = snap.val();
                 if(!o) return;
-                // 距離警示與自動控制
-                if(o.status === 'accepted' && o.dLat && o.pLat) {
-                    const d = calcDist(o.pLat, o.pLon, o.dLat, o.dLon).toFixed(1);
-                    if(currentRole === 'passenger') {
-                        document.getElementById('p-cancel-control').style.display = (d > 5) ? 'block' : 'none';
-                    }
+
+                if(o.status === 'waiting' && currentRole === 'driver') {
+                    alert("乘客已重新開放此單，您已被移出。");
+                    closeChat();
+                }
+
+                if(o.status === 'accepted') {
+                    if(currentRole === 'passenger') document.getElementById('p-cancel-control').style.display = 'block';
+                } else {
+                    document.getElementById('p-cancel-control').style.display = 'none';
                 }
             });
 
@@ -208,29 +218,38 @@
             }
         }
 
+        function rejectDriver() {
+            if(!confirm("確定要讓別的司機來搶單嗎？目前的司機將會被退出。")) return;
+            db.ref('messages/' + activeOrderId).push({ role: 'system', text: "乘客重啟訂單，等待新司機中...", time: Date.now() });
+            db.ref('orders/' + activeOrderId).update({ 
+                status: 'waiting', 
+                dId: null, 
+                dLat: null, 
+                dLon: null 
+            });
+        }
+
+        function closeChat() {
+            localStorage.removeItem('jasper_active_order');
+            activeOrderId = null;
+            selectRole(currentRole);
+        }
+
         function renderHistory() {
             db.ref('orders').once('value', snap => {
                 const orders = snap.val();
                 const pList = document.getElementById('p-history-list');
                 const dList = document.getElementById('d-history-list');
                 pList.innerHTML = ''; dList.innerHTML = '';
-                
                 for(let id in orders) {
                     const o = orders[id];
                     const time = new Date(o.createTime).toLocaleString();
-                    const item = `<div class="order-history-item" onclick="loadActiveOrder('${id}')">🕒 ${time}<br>📍 ${o.start} ➔ ${o.end} (${o.status})</div>`;
-                    
+                    const statusTag = `<span class="status-tag ${o.status==='waiting'?'tag-waiting':'tag-accepted'}">${o.status}</span>`;
+                    const item = `<div class="history-item" onclick="loadActiveOrder('${id}')">${statusTag} ${time}<br>📍 ${o.start} ➔ ${o.end}</div>`;
                     if(o.pId === userId) pList.innerHTML += item;
                     if(o.dId === userId) dList.innerHTML += item;
                 }
             });
-        }
-
-        function rejectDriver() {
-            if(!confirm("重新開放搶單？")) return;
-            db.ref('messages/' + activeOrderId).push({ role: 'system', text: "乘客重新開放搶單。", time: Date.now() });
-            db.ref('orders/' + activeOrderId).update({ status: 'waiting', dId: null, dLat: null });
-            closeChat();
         }
     </script>
 </body>
