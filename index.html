@@ -1,65 +1,254 @@
-// --- 僅節錄並修改核心邏輯部分，其餘黑金介面與 Config 保持不變 ---
-
-function acceptOrder(id, dist) {
-    if(dist > 5 && !confirm(`此乘客距離您 ${dist}km 較遠，確定要搶單嗎？`)) return;
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jasper 智慧媒合系統 - 安全監控版</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     
-    db.ref('orders/' + id).transaction(order => {
-        if(order && order.status === 'waiting') {
-            order.status = 'accepted';
-            order.dLat = userLat; 
-            order.dLon = userLon; // 記錄司機當前位置
-            return order;
+    <style>
+        /* --- 視覺設計 (專業黑金風格) --- */
+        body { background-color: #121212; color: #e0e0e0; font-family: -apple-system, sans-serif; margin: 0; padding: 0; padding-bottom: 20px; }
+        h2 { margin: 0; padding: 20px; text-align: center; background: #1e1e1e; color: #00e676; border-bottom: 1px solid #333; font-size: 20px; letter-spacing: 1px; }
+        
+        .container { padding: 20px; max-width: 600px; margin: 0 auto; }
+        .card { background: #1e1e1e; border-radius: 12px; padding: 20px; margin-bottom: 15px; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        
+        /* 角色切換按鈕 */
+        .role-switcher { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-role { flex: 1; padding: 15px; border: 1px solid #444; background: #2c2c2c; color: #fff; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        .btn-role.active { background: #00e676; color: #000; border-color: #00e676; }
+
+        /* 輸入與按鈕 */
+        label { color: #00e676; font-size: 14px; font-weight: bold; margin-bottom: 8px; display: block; }
+        input { width: 100%; padding: 14px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; font-size: 16px; margin-bottom: 15px; box-sizing: border-box; outline: none; }
+        input:focus { border-color: #00e676; }
+        .btn-main { width: 100%; padding: 16px; background: linear-gradient(135deg, #00e676, #00c853); color: #000; border: none; border-radius: 10px; font-size: 18px; font-weight: bold; cursor: pointer; }
+
+        /* 距離預警 */
+        .dist-warning { background: #ff5252; color: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; animation: blink 1.5s infinite; }
+        @keyframes blink { 50% { opacity: 0.7; } }
+
+        /* 聊天視窗 */
+        #chat-section { display: none; }
+        #chat-box { height: 300px; overflow-y: auto; background: #121212; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px; }
+        
+        .msg { max-width: 80%; padding: 10px 15px; border-radius: 15px; font-size: 14px; line-height: 1.4; word-wrap: break-word; }
+        .msg-driver { align-self: flex-end; background: #00e676; color: #000; border-bottom-right-radius: 2px; }
+        .msg-passenger { align-self: flex-start; background: #333; color: #fff; border-bottom-left-radius: 2px; }
+        .msg-system { align-self: center; background: #444; color: #ffeb3b; font-size: 12px; border-radius: 5px; padding: 5px 15px; }
+        
+        .chat-input-group { display: flex; gap: 10px; }
+        .btn-send { width: 80px; background: #2979ff; border: none; color: white; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <h2>🚕 Jasper 智慧媒合系統</h2>
+
+    <div class="container">
+        <div id="role-selection" class="role-switcher">
+            <button class="btn-role" id="btn-p" onclick="setRole('passenger')">我是乘客 (發單)</button>
+            <button class="btn-role" id="btn-d" onclick="setRole('driver')">我是司機 (搶單)</button>
+        </div>
+
+        <div id="passenger-ui" style="display:none;">
+            <div id="dist-alert-p"></div>
+            <div class="card">
+                <label>📍 起點</label>
+                <input type="text" id="start-point" placeholder="例如：新莊區昌平街326號">
+                <label>🏁 目的地</label>
+                <input type="text" id="end-point" placeholder="例如：桃園機場第二航廈">
+                <button class="btn-main" onclick="postOrder()">發送搶單需求</button>
+            </div>
+        </div>
+
+        <div id="driver-ui" style="display:none;">
+            <h3 style="color:#888; font-size:14px; margin-bottom:10px;">📡 全區訂單雷達 (即時更新)</h3>
+            <div id="order-list">
+                <div style="text-align:center; padding:20px; color:#555;">正在定位並搜尋訂單...</div>
+            </div>
+        </div>
+
+        <div id="chat-section">
+            <div class="card">
+                <label>💬 即時對話 (後台監控中)</label>
+                <div id="chat-box"></div>
+                <div class="chat-input-group">
+                    <input type="text" id="chat-input" placeholder="輸入訊息..." style="margin-bottom:0;">
+                    <button class="btn-send" onclick="sendMessage()">發送</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Firebase 配置 (已套用您的專屬設定) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyDqUA1Y2odbb51AN-MtE4bRLcz_cRm2A68",
+            authDomain: "jasper-taxi.firebaseapp.com",
+            projectId: "jasper-taxi",
+            storageBucket: "jasper-taxi.firebasestorage.app",
+            messagingSenderId: "558407272439",
+            appId: "1:558407272439:web:e48abaae404530a75c90f2",
+            measurementId: "G-X8HP1JRZYN",
+            databaseURL: "https://jasper-taxi-default-rtdb.asia-southeast1.firebasedatabase.app"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        let currentRole = '', activeOrderId = null, userLat = null, userLon = null;
+
+        // 初始化 GPS 定位
+        navigator.geolocation.getCurrentPosition(pos => {
+            userLat = pos.coords.latitude;
+            userLon = pos.coords.longitude;
+            console.log("定位成功:", userLat, userLon);
+        }, err => console.error("無法定位:", err));
+
+        function setRole(role) {
+            currentRole = role;
+            document.querySelectorAll('.btn-role').forEach(b => b.classList.remove('active'));
+            if(role === 'passenger') document.getElementById('btn-p').classList.add('active');
+            else document.getElementById('btn-d').classList.add('active');
+
+            document.getElementById('passenger-ui').style.display = role === 'passenger' ? 'block' : 'none';
+            document.getElementById('driver-ui').style.display = role === 'driver' ? 'block' : 'none';
+            if(role === 'driver') listenForOrders();
         }
-    }, (err, committed) => {
-        if(committed) { 
-            activeOrderId = id; 
-            listenForChat(id); 
+
+        // 距離計算公式
+        function calcDist(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        }
+
+        // 乘客發單
+        function postOrder() {
+            const start = document.getElementById('start-point').value;
+            const end = document.getElementById('end-point').value;
+            if(!start || !end) return alert("請填寫起訖地點");
+
+            const newOrderRef = db.ref('orders').push();
+            activeOrderId = newOrderRef.key;
+            newOrderRef.set({
+                start: start,
+                end: end,
+                status: 'waiting',
+                pLat: userLat,
+                pLon: userLon,
+                createTime: Date.now()
+            });
+            alert("訂單已發送，等待司機搶單...");
+            listenForChat(activeOrderId);
+        }
+
+        // 司機監聽全區訂單
+        function listenForOrders() {
+            db.ref('orders').on('value', (snapshot) => {
+                const orders = snapshot.val();
+                const listDiv = document.getElementById('order-list');
+                listDiv.innerHTML = '';
+                let hasOrder = false;
+
+                for(let id in orders) {
+                    if(orders[id].status === 'waiting') {
+                        hasOrder = true;
+                        const dist = (userLat && orders[id].pLat) ? calcDist(userLat, userLon, orders[id].pLat, orders[id].pLon).toFixed(1) : "?";
+                        const item = document.createElement('div');
+                        item.className = 'card';
+                        item.innerHTML = `
+                            <div style="margin-bottom:10px;">
+                                <div style="color:#00e676; font-size:12px;">📏 距離您約 ${dist} km</div>
+                                <div style="margin:5px 0;">📍 ${orders[id].start}</div>
+                                <div style="margin:5px 0;">🏁 ${orders[id].end}</div>
+                            </div>
+                            <button class="btn-main" onclick="acceptOrder('${id}', ${dist})">立即搶單</button>
+                        `;
+                        listDiv.appendChild(item);
+                    }
+                }
+                if(!hasOrder) listDiv.innerHTML = '<div style="text-align:center; padding:20px; color:#555;">目前沒有待接單</div>';
+            });
+        }
+
+        // 搶單邏輯 (含遠距警示)
+        function acceptOrder(id, dist) {
+            if(dist !== "?" && dist > 5 && !confirm(`此乘客距離您 ${dist}km 較遠，確定要搶單嗎？`)) return;
+
+            db.ref('orders/' + id).transaction((order) => {
+                if (order && order.status === 'waiting') {
+                    order.status = 'accepted';
+                    order.dLat = userLat;
+                    order.dLon = userLon;
+                    return order;
+                }
+                return; 
+            }, (error, committed) => {
+                if (committed) {
+                    activeOrderId = id;
+                    if(dist > 5) {
+                        db.ref('messages/' + id).push({
+                            role: 'system',
+                            text: `⚠️ 系統提示：司機距離乘客較遠 (${dist}km)，請確認預計抵達時間。`,
+                            time: Date.now()
+                        });
+                    }
+                    listenForChat(id);
+                } else {
+                    alert("手慢了！訂單已被搶走。");
+                }
+            });
+        }
+
+        // 監聽對話 (含自動距離提醒)
+        function listenForChat(orderId) {
+            document.getElementById('chat-section').style.display = 'block';
             
-            // --- 新增：自動發送系統警示訊息 ---
-            if(dist > 5) {
-                const sysMsg = `⚠️ 系統提示：司機距離較遠 (${dist}km)，請雙方確認預計抵達時間。`;
-                db.ref('messages/' + id).push({
-                    role: 'system', // 以系統身分發言
-                    text: sysMsg,
-                    time: Date.now()
-                });
-            }
-        }
-    });
-}
+            db.ref('orders/' + orderId).on('value', snap => {
+                const o = snap.val();
+                if(o.status === 'accepted' && o.dLat && o.pLat) {
+                    const d = calcDist(o.pLat, o.pLon, o.dLat, o.dLon).toFixed(1);
+                    const alertBox = document.getElementById('dist-alert-p');
+                    if(d > 5) alertBox.innerHTML = `<div class="dist-warning">⚠️ 司機距離較遠 (${d}km)</div>`;
+                    else alertBox.innerHTML = `<div style="color:#00e676; text-align:center; margin-bottom:10px;">🚕 司機正在趕往中 (約 ${d}km)</div>`;
+                }
+            });
 
-// 修改監聽對話的顯示邏輯，增加系統訊息樣式
-function listenForChat(orderId) {
-    document.getElementById('chat-section').style.display = 'block';
-    
-    // 監聽訂單狀態並顯示乘客端警示框
-    db.ref('orders/' + orderId).on('value', snap => {
-        const o = snap.val();
-        if(o.status === 'accepted' && o.dLat && o.pLat) {
-            const d = calcDist(o.pLat, o.pLon, o.dLat, o.dLon).toFixed(1);
-            const alertBox = document.getElementById('dist-alert-p');
-            if(d > 5) alertBox.innerHTML = `<div class="dist-warning">⚠️ 司機距離較遠 (${d}km)</div>`;
-            else alertBox.innerHTML = `<div style="color:#00e676; text-align:center; margin-bottom:10px;">🚕 司機距離約 ${d}km</div>`;
+            db.ref('messages/' + orderId).on('value', (snapshot) => {
+                const msgs = snapshot.val();
+                const box = document.getElementById('chat-box');
+                box.innerHTML = '';
+                for(let mId in msgs) {
+                    const m = msgs[mId];
+                    const div = document.createElement('div');
+                    if(m.role === 'system') {
+                        div.className = 'msg-system';
+                        div.innerText = m.text;
+                    } else {
+                        div.className = `msg ${m.role === 'driver' ? 'msg-driver' : 'msg-passenger'}`;
+                        div.innerText = m.text;
+                    }
+                    box.appendChild(div);
+                }
+                box.scrollTop = box.scrollHeight;
+            });
         }
-    });
 
-    db.ref('messages/' + orderId).on('value', snap => {
-        const msgs = snap.val();
-        const box = document.getElementById('chat-box');
-        box.innerHTML = '';
-        for(let m in msgs) {
-            const mData = msgs[m];
-            const div = document.createElement('div');
-            // 根據不同身分套用樣式
-            if(mData.role === 'system') {
-                div.style = "align-self:center; background:#444; color:#ffeb3b; font-size:12px; padding:5px 10px; border-radius:5px; margin:5px 0;";
-                div.innerText = mData.text;
-            } else {
-                div.className = `msg msg-${mData.role}`;
-                div.innerText = mData.text;
-            }
-            box.appendChild(div);
+        function sendMessage() {
+            const text = document.getElementById('chat-input').value;
+            if(!text || !activeOrderId) return;
+            db.ref('messages/' + activeOrderId).push({
+                role: currentRole,
+                text: text,
+                time: Date.now()
+            });
+            document.getElementById('chat-input').value = '';
         }
-        box.scrollTop = box.scrollHeight;
-    });
-}
+    </script>
+</body>
+</html>
