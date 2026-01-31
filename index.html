@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Jasper 智慧媒合叫車系統</title>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.3/firebase-database-compat.js"></script>
+
+    <style>
+        /* 承襲原有的黑金風格 */
+        body { background-color: #121212; color: #e0e0e0; font-family: sans-serif; margin: 0; padding-bottom: 80px; }
+        .header { background: #1e1e1e; padding: 15px; text-align: center; border-bottom: 1px solid #333; }
+        .role-switcher { display: flex; background: #222; padding: 5px; border-radius: 25px; margin: 10px 20px; }
+        .role-btn { flex: 1; padding: 8px; text-align: center; border-radius: 20px; cursor: pointer; font-size: 14px; }
+        .role-btn.active { background: #00e676; color: #000; font-weight: bold; }
+        
+        .container { padding: 20px; max-width: 600px; margin: 0 auto; }
+        .card { background: #1e1e1e; border-radius: 12px; padding: 15px; margin-bottom: 15px; border: 1px solid #333; position: relative; }
+        
+        /* 搶單動畫效果 */
+        .order-flash { border: 2px solid #00e676; animation: pulse 1.5s infinite; }
+        @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(0,230,118,0.4); } 70% { box-shadow: 0 0 0 10px rgba(0,230,118,0); } 100% { box-shadow: 0 0 0 0 rgba(0,230,118,0); } }
+
+        /* 狀態標籤 */
+        .status-badge { position: absolute; top: 10px; right: 10px; padding: 4px 8px; border-radius: 4px; font-size: 12px; }
+        .status-waiting { background: #ff9800; color: white; }
+        .status-accepted { background: #2196f3; color: white; }
+        .status-done { background: #4caf50; color: white; }
+
+        input, select, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #444; background: #2c2c2c; color: #fff; font-size: 16px; box-sizing: border-box; }
+        .btn-main { background: #00e676; color: #000; font-weight: bold; border: none; cursor: pointer; }
+        .btn-grab { background: #ff5252; color: white; animation: shake 0.5s infinite; }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-2px); } 75% { transform: translateX(2px); } }
+
+        /* 評價區塊 */
+        .rating-box { display: none; margin-top: 10px; border-top: 1px dashed #444; padding-top: 10px; }
+        .star-input { color: #ffeb3b; font-size: 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2 style="margin:0; color:#00e676;">Jasper 智慧媒合系統</h2>
+    <div id="clock" style="font-size: 12px; color: #888;">正在讀取精準時間...</div>
+</div>
+
+<div class="role-switcher">
+    <div class="role-btn active" onclick="setUserRole('passenger')">我是乘客 (發單)</div>
+    <div class="role-btn" onclick="setUserRole('driver')">我是司機 (搶單)</div>
+</div>
+
+<div class="container">
+    <div id="passenger-ui">
+        <div class="card">
+            <h3 style="margin-top:0;">📍 建立叫車需求</h3>
+            <input type="text" id="p-start" placeholder="上車地址 (例: 板橋車站)">
+            <input type="text" id="p-end" placeholder="下車地址 (例: 桃園機場)">
+            <button class="btn-main" onclick="submitOrder()">🚀 立即發送搶單需求</button>
+        </div>
+        <div id="my-orders">
+            <h4>我的訂單狀態</h4>
+            </div>
+    </div>
+
+    <div id="driver-ui" style="display:none;">
+        <div id="available-orders">
+            <h4 style="text-align:center; color:#888;">📡 正在掃描周邊訂單...</h4>
+            </div>
+    </div>
+</div>
+
+<script>
+    // --- 1. Firebase 初始化 (請替換為您自己的 Firebase 配置) ---
+    // 前往 Firebase Console -> 專案設定 -> 新增 Web 應用程式獲取金鑰
+    const firebaseConfig = {
+        apiKey: "AIzaSyDqUA1Y2odbb51AN-MtE4bRLcz_cRm2A68",
+  authDomain: "jasper-taxi.firebaseapp.com",
+  projectId: "jasper-taxi",
+  storageBucket: "jasper-taxi.firebasestorage.app",
+  messagingSenderId: "558407272439",
+  appId: "1:558407272439:web:e48abaae404530a75c90f2",
+  measurementId: "G-X8HP1JRZYN",databaseURL: "https://jasper-taxi-default-rtdb.firebaseio.com"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let userRole = 'passenger';
+    let userId = 'user_' + Math.floor(Math.random() * 1000); // 模擬用戶ID
+
+    // --- 2. 時間記錄系統 ---
+    function updateClock() {
+        const now = new Date();
+        document.getElementById('clock').innerText = "系統校準時間：" + now.toLocaleString();
+    }
+    setInterval(updateClock, 1000);
+
+    function setUserRole(role) {
+        userRole = role;
+        document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+        document.getElementById('passenger-ui').style.display = role === 'passenger' ? 'block' : 'none';
+        document.getElementById('driver-ui').style.display = role === 'driver' ? 'block' : 'none';
+    }
+
+    // --- 3. 乘客功能：發送訂單 ---
+    function submitOrder() {
+        const start = document.getElementById('p-start').value;
+        const end = document.getElementById('p-end').value;
+        if(!start || !end) return alert("請輸入起訖點");
+
+        const orderData = {
+            passengerId: userId,
+            start: start,
+            end: end,
+            status: 'waiting', // waiting, accepted, completed
+            createTime: new Date().getTime(),
+            driverId: '',
+            acceptTime: '',
+            finishTime: '',
+            reviews: { p_star: 0, p_msg: '', d_star: 0, d_msg: '' }
+        };
+
+        const newOrderRef = db.ref('orders').push();
+        newOrderRef.set(orderData);
+        alert("訂單已發出，請靜候司機搶單！");
+    }
+
+    // --- 4. 即時監聽訂單數據 ---
+    db.ref('orders').on('value', (snapshot) => {
+        const orders = snapshot.val();
+        renderOrders(orders);
+    });
+
+    function renderOrders(orders) {
+        const pList = document.getElementById('my-orders');
+        const dList = document.getElementById('available-orders');
+        pList.innerHTML = '<h4>我的訂單狀態</h4>';
+        dList.innerHTML = '<h4 style="text-align:center;">📡 即時搶單雷達</h4>';
+
+        for(let id in orders) {
+            const order = orders[id];
+            
+            // 乘客端：顯示自己的訂單
+            if(order.passengerId === userId) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <span class="status-badge ${getStatusClass(order.status)}">${getStatusText(order.status)}</span>
+                    <div><b>從：</b>${order.start}</div>
+                    <div><b>到：</b>${order.end}</div>
+                    <div style="font-size:11px; color:#666;">發單時間：${new Date(order.createTime).toLocaleTimeString()}</div>
+                    ${order.driverId ? `<div style="color:#00e676;">🚖 司機 ${order.driverId} 已接單</div>` : ''}
+                    ${order.status === 'completed' ? renderReviewUI(id, 'passenger') : ''}
+                `;
+                pList.appendChild(card);
+            }
+
+            // 司機端：顯示所有等待中的訂單
+            if(userRole === 'driver' && order.status === 'waiting') {
+                const card = document.createElement('div');
+                card.className = 'card order-flash';
+                card.innerHTML = `
+                    <div style="color:#ff5252; font-weight:bold;">🔥 新訂單！</div>
+                    <div><b>起點：</b>${order.start}</div>
+                    <div><b>終點：</b>${order.end}</div>
+                    <button class="btn-grab" onclick="grabOrder('${id}')">📢 立即搶單</button>
+                `;
+                dList.appendChild(card);
+            } else if (userRole === 'driver' && order.driverId === userId) {
+                // 司機已接的訂單
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <span class="status-badge status-accepted">執行中</span>
+                    <div><b>客戶起點：</b>${order.start}</div>
+                    <button onclick="completeOrder('${id}')">✅ 到達目的地(結單)</button>
+                    ${order.status === 'completed' ? renderReviewUI(id, 'driver') : ''}
+                `;
+                dList.appendChild(card);
+            }
+        }
+    }
+
+    // --- 5. 核心邏輯：搶單與結單 ---
+    function grabOrder(orderId) {
+        // 使用 Firebase transaction 確保只有一個人能搶到單
+        db.ref('orders/' + orderId).transaction((order) => {
+            if (order && order.status === 'waiting') {
+                order.status = 'accepted';
+                order.driverId = userId;
+                order.acceptTime = new Date().getTime();
+                return order;
+            }
+            return; // 搶單失敗
+        }, (error, committed) => {
+            if (committed) alert("搶單成功！請立即前往載客");
+            else alert("哎呀！被別的司機搶先了");
+        });
+    }
+
+    function completeOrder(orderId) {
+        db.ref('orders/' + orderId).update({
+            status: 'completed',
+            finishTime: new Date().getTime()
+        });
+        alert("行程結束！辛苦了。");
+    }
+
+    // --- 工具函式 ---
+    function getStatusClass(s) {
+        if(s === 'waiting') return 'status-waiting';
+        if(s === 'accepted') return 'status-accepted';
+        return 'status-done';
+    }
+    function getStatusText(s) {
+        if(s === 'waiting') return '⌛ 等待搶單';
+        if(s === 'accepted') return '🚕 司機趕往中';
+        return '✨ 行程完成';
+    }
+
+    function renderReviewUI(orderId, role) {
+        return `
+            <div class="rating-box" style="display:block;">
+                <p style="font-size:12px; margin:5px 0;">行程結束，請給予評價(僅後台可見)</p>
+                <select id="star-${orderId}" style="width:70px; padding:2px; font-size:12px;">
+                    <option value="5">⭐⭐⭐⭐⭐</option>
+                    <option value="4">⭐⭐⭐⭐</option>
+                    <option value="3">⭐⭐⭐</option>
+                    <option value="2">⭐⭐</option>
+                    <option value="1">⭐</option>
+                </select>
+                <input type="text" id="msg-${orderId}" placeholder="寫下評語..." style="width:100px; padding:2px; font-size:12px;">
+                <button onclick="sendReview('${orderId}', '${role}')" style="width:50px; padding:2px; font-size:12px;">送出</button>
+            </div>
+        `;
+    }
+
+    function sendReview(orderId, role) {
+        const star = document.getElementById(`star-${orderId}`).value;
+        const msg = document.getElementById(`msg-${orderId}`).value;
+        const updateObj = {};
+        if(role === 'passenger') {
+            updateObj[`orders/${orderId}/reviews/p_star`] = star;
+            updateObj[`orders/${orderId}/reviews/p_msg`] = msg;
+        } else {
+            updateObj[`orders/${orderId}/reviews/d_star`] = star;
+            updateObj[`orders/${orderId}/reviews/d_msg`] = msg;
+        }
+        db.ref().update(updateObj);
+        alert("感謝評價！");
+    }
+</script>
+
+</body>
+</html>
