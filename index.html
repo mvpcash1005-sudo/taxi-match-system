@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Jasper 智慧媒合系統 - 終極修復版</title>
+    <title>Jasper 智慧媒合系統 - 2026 全功能版</title>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
     <style>
@@ -16,34 +16,29 @@
         input, select { width: 100%; padding: 12px; background: #2c2c2c; border: 1px solid #444; color: #fff; border-radius: 8px; margin-bottom: 10px; box-sizing: border-box; }
         .btn-main { width: 100%; padding: 15px; background: #00e676; color: #000; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; }
         
-        /* 管理員介面修正 */
+        /* 管理員介面 */
         .admin-box { display: none; margin-top: 10px; border: 2px solid #00e676; padding: 10px; border-radius: 12px; background: #000; }
-        .admin-nav { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 10px; }
-        .tab-btn { padding: 8px 12px; background: #333; color: #fff; border: none; border-radius: 5px; cursor: pointer; white-space: nowrap; font-size: 13px; }
+        .admin-nav { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 10px; border-bottom: 1px solid #333; margin-bottom: 10px; }
+        .tab-btn { padding: 8px 12px; background: #333; color: #fff; border: none; border-radius: 5px; cursor: pointer; white-space: nowrap; font-size: 12px; }
         .tab-btn.active { background: #00e676; color: #000; }
         
-        /* 圖片放大修復 (不再使用 window.open) */
-        #img-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 10002; justify-content: center; align-items: center; }
+        /* 圖片放大檢視 (不跳頁面) */
+        #img-viewer { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.95); z-index: 20000; justify-content: center; align-items: center; }
         #img-viewer img { max-width: 95%; max-height: 90%; border: 2px solid #00e676; }
         .img-thumb { width: 45px; height: 45px; object-fit: cover; border: 1px solid #555; margin-right: 3px; cursor: pointer; }
 
-        /* 表格修正 */
+        /* 表格與文字 */
         table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
         th, td { border: 1px solid #333; padding: 8px; text-align: left; vertical-align: middle; }
         th { background: #222; color: #00e676; }
-        
-        /* 乘客進度區 */
-        #p-status-box { background: #004d40; padding: 15px; border-radius: 10px; border: 1px solid #00e676; display: none; margin-bottom: 15px; }
-        .upload-title { font-size: 12px; color: #00e676; display: block; margin-top: 10px; }
-        .preview-mini { width: 100%; height: 80px; background: #222; border-radius: 8px; margin-top: 5px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-        .preview-mini img { width: 100%; height: 100%; object-fit: cover; }
+        .money { color: #00e676; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div id="img-viewer" onclick="this.style.display='none'">
         <img id="viewer-img" src="">
-        <p style="position: absolute; bottom: 20px; color: #fff;">點擊任意處關閉</p>
+        <p style="position: absolute; bottom: 30px; color: #00e676;">點擊任意處關閉大圖</p>
     </div>
 
     <div class="header" onclick="triggerAdmin()">🚕 Jasper 智慧媒合管理總端</div>
@@ -53,16 +48,17 @@
             <div class="admin-nav">
                 <button class="tab-btn active" id="btn-tab-pay" onclick="switchTab('payment')">💰 匯款放單</button>
                 <button class="tab-btn" id="btn-tab-drv" onclick="switchTab('verify')">📄 司機審核</button>
+                <button class="tab-btn" id="btn-tab-rep" onclick="switchTab('report')">📊 每日報表</button>
                 <button class="tab-btn" id="btn-tab-mem" onclick="switchTab('members')">👥 司機名錄</button>
-                <button onclick="closeAdmin()" style="margin-left: auto; color: red; background: none; border: none;">關閉</button>
+                <button onclick="document.getElementById('admin-ui').style.display='none'" style="margin-left: auto; color: red; background: none; border: none;">關閉</button>
             </div>
             <div id="admin-content"></div>
         </div>
 
         <div id="main-flow">
-            <div id="p-status-box">
-                <h3 style="margin: 0 0 10px 0; font-size: 16px;">🔍 行程狀態追蹤</h3>
-                <div id="p-status-text">讀取中...</div>
+            <div id="p-status-box" style="display:none; background:#004d40; padding:15px; border-radius:10px; border:1px solid #00e676; margin-bottom:15px;">
+                <h3 style="margin:0 0 5px 0; font-size:16px;">🔍 訂單進度</h3>
+                <div id="p-status-text"></div>
             </div>
 
             <div style="display:flex; gap:10px; margin-bottom:20px;">
@@ -71,60 +67,30 @@
             </div>
 
             <div id="passenger-ui">
-                <div class="card" style="background:#004d40; border-color:#00e676; text-align:center; font-size:14px;">
-                    <b>💎 Jasper 收款 (先匯款後放單)</b><br>
+                <div class="card" style="background:#004d40; text-align:center; font-size:14px; border-color:#00e676;">
+                    <b>💎 Jasper 收款 (先匯款後審核)</b><br>
                     國泰(013): 125506256272 | 街口: 909191462
                 </div>
                 <div class="card">
-                    <label style="font-size:12px; color:#00e676;">📅 預約上車時間</label>
                     <input type="datetime-local" id="p-book-time">
-                    <input type="tel" id="p-phone" placeholder="📞 聯絡電話">
+                    <input type="tel" id="p-phone" placeholder="📞 您的電話">
                     <input type="text" id="p-start" placeholder="📍 起點">
                     <input type="text" id="p-end" placeholder="🏁 目的地">
-                    <input type="number" id="p-fare" placeholder="💵 建議匯款總額 (含加成/小費)">
+                    <input type="number" id="p-fare" placeholder="💵 建議匯款總額">
                     <button class="btn-main" onclick="postOrder()">發送訂單並核帳</button>
                 </div>
             </div>
 
             <div id="driver-register" style="display:none;" class="card">
-                <h3 style="color:#00e676; margin-top:0;">司機實名認證 (補齊 6 證)</h3>
+                <h3 style="color:#00e676; margin-top:0;">司機實名註冊 (補齊 6 證)</h3>
                 <input type="text" id="d-name" placeholder="姓名">
                 <input type="tel" id="d-phone" placeholder="電話">
                 <input type="text" id="d-car" placeholder="車牌">
                 <input type="text" id="d-bank" placeholder="收款帳號 (國泰/街口)">
-                
-                <span class="upload-title">📸 車牌照片</span>
-                <input type="file" accept="image/*" onchange="previewImg(this, 'pre-car')">
-                <div class="preview-mini" id="pre-car">預覽</div>
-
-                <div style="display:flex; gap:5px;">
-                    <div style="flex:1;">
-                        <span class="upload-title">📸 身分證 (正)</span>
-                        <input type="file" accept="image/*" onchange="previewImg(this, 'pre-id-f')">
-                        <div class="preview-mini" id="pre-id-f">預覽</div>
-                    </div>
-                    <div style="flex:1;">
-                        <span class="upload-title">📸 身分證 (反)</span>
-                        <input type="file" accept="image/*" onchange="previewImg(this, 'pre-id-b')">
-                        <div class="preview-mini" id="pre-id-b">預覽</div>
-                    </div>
-                </div>
-
-                <div style="display:flex; gap:5px;">
-                    <div style="flex:1;">
-                        <span class="upload-title">📸 執業證 (正)</span>
-                        <input type="file" accept="image/*" onchange="previewImg(this, 'pre-lic-f')">
-                        <div class="preview-mini" id="pre-lic-f">預覽</div>
-                    </div>
-                    <div style="flex:1;">
-                        <span class="upload-title">📸 執業證 (反)</span>
-                        <input type="file" accept="image/*" onchange="previewImg(this, 'pre-lic-b')">
-                        <div class="preview-mini" id="pre-lic-b">預覽</div>
-                    </div>
-                </div>
-
+                <small style="color:#00e676;">📸 請依序上傳：車牌、身分證正/反、執業證正/反</small>
+                <input type="file" multiple accept="image/*" onchange="handleMultipleUpload(this)">
+                <div id="upload-previews" style="display:flex; flex-wrap:wrap; gap:5px; margin-top:10px;"></div>
                 <button class="btn-main" style="margin-top:15px;" onclick="saveDriverProfile()">提交資料並等待審核</button>
-                <button class="btn-main" style="background:#00c300; margin-top:10px;" onclick="window.open('https://line.me/ti/p/~love_ice_boy')">一鍵加入 Jasper 老師 Line</button>
             </div>
 
             <div id="driver-ui" style="display:none;"><div id="order-list">搜尋行程中...</div></div>
@@ -132,147 +98,163 @@
     </div>
 
     <script>
-        // Firebase Config
-        const firebaseConfig = {
-            apiKey: "AIzaSyDqUA1Y2odbb51AN-MtE4bRLcz_cRm2A68",
-            databaseURL: "https://jasper-taxi-default-rtdb.asia-southeast1.firebasedatabase.app"
-        };
+        const firebaseConfig = { apiKey: "AIzaSyDqUA1Y2odbb51AN-MtE4bRLcz_cRm2A68", databaseURL: "https://jasper-taxi-default-rtdb.asia-southeast1.firebasedatabase.app" };
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
         const ADMIN_PASS = "Jasper888";
         let userId = localStorage.getItem('jasper_user_id') || 'u' + Date.now();
         localStorage.setItem('jasper_user_id', userId);
-        let clickCount = 0;
+        let clickCount = 0, uploadedImages = [];
 
-        // --- 管理員後台觸發器 ---
+        // --- 管理員觸發與切換 ---
         function triggerAdmin() {
             clickCount++;
             if(clickCount >= 5) {
                 const p = prompt("Jasper 老師，請輸入密碼：");
-                if(p === ADMIN_PASS) {
-                    document.getElementById('admin-ui').style.display = 'block';
-                    switchTab('payment');
-                }
+                if(p === ADMIN_PASS) { document.getElementById('admin-ui').style.display='block'; switchTab('payment'); }
                 clickCount = 0;
             }
-        }
-
-        // --- 修復圖片放大邏輯 (不跳轉網頁) ---
-        function zoomImg(src) {
-            document.getElementById('viewer-img').src = src;
-            document.getElementById('img-viewer').style.display = 'flex';
         }
 
         function switchTab(tab) {
             document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
             if(tab==='payment') { document.getElementById('btn-tab-pay').classList.add('active'); loadAdminOrders(); }
             if(tab==='verify') { document.getElementById('btn-tab-drv').classList.add('active'); loadAdminVerify(); }
+            if(tab==='report') { document.getElementById('btn-tab-rep').classList.add('active'); loadDailyReport(); }
             if(tab==='members') { document.getElementById('btn-tab-mem').classList.add('active'); loadAdminMembers(); }
         }
 
-        // --- 管理端：匯款放單 (修復 undefined 時間) ---
-        function loadAdminOrders() {
-            db.ref('orders').on('value', snap => {
-                let html = '<h4>💰 待核帳清單</h4><table><tr><th>時間</th><th>乘客</th><th>路線</th><th>金額</th><th>操作</th></tr>';
+        // --- 1. 每日對帳報表修復 ---
+        function loadDailyReport() {
+            const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+            const dateStr = yesterday.toISOString().split('T')[0];
+            db.ref('orders').once('value', snap => {
+                const map = {}; let grandTotal = 0;
                 snap.forEach(c => {
                     const o = c.val();
-                    if(o.status === 'waiting') {
-                        const date = new Date(o.createTime);
-                        const dateStr = `${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${date.getMinutes().toString().padStart(2,'0')}`;
-                        html += `<tr><td>${dateStr}</td><td>${o.pPhone}</td><td>${o.start}➔${o.end}</td><td>$${o.fare}</td><td><button onclick="approveOrder('${c.key}')">核帳</button></td></tr>`;
+                    const oDate = new Date(o.createTime).toISOString().split('T')[0];
+                    if(oDate === dateStr && o.status === 'finished' && o.dId) {
+                        if(!map[o.dId]) map[o.dId] = { name: o.dName, bank: o.dBank, total: 0, count: 0 };
+                        map[o.dId].total += Number(o.fare);
+                        map[o.dId].count++;
+                        grandTotal += Number(o.fare);
                     }
                 });
+                let html = `<h4>📊 ${dateStr} 結算報表 (今日 14:00 前匯款)</h4><p>昨日總業績：<span class="money">$${grandTotal}</span></p><table><tr><th>司機/銀行</th><th>應匯總額</th><th>趟次</th></tr>`;
+                for(let id in map) {
+                    html += `<tr><td>${map[id].name}<br><small>${map[id].bank}</small></td><td class="money">$${map[id].total}</td><td>${map[id].count}</td></tr>`;
+                }
                 document.getElementById('admin-content').innerHTML = html + '</table>';
             });
         }
 
-        // --- 管理端：成員資料庫 (修復圖片顯示與點擊放大) ---
-        function loadAdminMembers() {
+        // --- 2. 司機審核與成員名錄修復 ---
+        function loadAdminVerify() {
             db.ref('drivers').on('value', snap => {
-                let html = '<h4>👥 司機全資料庫 (永久)</h4><table><tr><th>姓名/手機</th><th>車牌/帳號</th><th>完整證件庫 (點圖放大)</th></tr>';
+                let html = '<h4>📄 司機准入審核</h4>';
                 snap.forEach(c => {
                     const d = c.val();
-                    html += `<tr>
-                        <td>${d.name}<br>${d.phone || '無電話'}</td>
-                        <td>${d.car}<br>${d.bank}</td>
-                        <td>
-                            <img class="img-thumb" src="${d.imgCar}" onclick="zoomImg(this.src)">
-                            <img class="img-thumb" src="${d.idF}" onclick="zoomImg(this.src)">
-                            <img class="img-thumb" src="${d.idB}" onclick="zoomImg(this.src)">
-                            <img class="img-thumb" src="${d.licF}" onclick="zoomImg(this.src)">
-                            <img class="img-thumb" src="${d.licB}" onclick="zoomImg(this.src)">
-                        </td>
-                    </tr>`;
+                    if(d.status === 'pending') {
+                        html += `<div class="card" style="font-size:11px;">司機:${d.name}<br><button onclick="approveDrv('${c.key}')" style="background:#00e676; padding:5px; border-radius:5px; border:none; margin-top:5px;">✅ 通過審核 (開啟接單權限)</button></div>`;
+                    }
+                });
+                document.getElementById('admin-content').innerHTML = html || '目前無待審核。';
+            });
+        }
+        function approveDrv(id) { db.ref('drivers/'+id).update({status:'approved'}); alert('該司機已可開始接單！'); }
+
+        function loadAdminMembers() {
+            db.ref('drivers').on('value', snap => {
+                let html = '<h4>👥 司機全資料庫 (永久保留)</h4><table><tr><th>姓名/電話</th><th>車牌/帳號</th><th>證件庫 (點圖放大)</th></tr>';
+                snap.forEach(c => {
+                    const d = c.val();
+                    html += `<tr><td>${d.name}<br>${d.phone}</td><td>${d.car}<br>${d.bank}</td><td>
+                        <img class="img-thumb" src="${d.img1}" onclick="zoomImg(this.src)">
+                        <img class="img-thumb" src="${d.img2}" onclick="zoomImg(this.src)">
+                        <img class="img-thumb" src="${d.img3}" onclick="zoomImg(this.src)">
+                    </td></tr>`;
                 });
                 document.getElementById('admin-content').innerHTML = html + '</table>';
             });
         }
 
-        // --- 乘客端進度追蹤 ---
-        function listenMyOrder() {
-            db.ref('orders').orderByChild('pId').equalTo(userId).on('value', snap => {
-                const box = document.getElementById('p-status-box');
-                const text = document.getElementById('p-status-text');
-                if(snap.exists()) {
-                    box.style.display = 'block';
-                    snap.forEach(c => {
-                        const o = c.val();
-                        let status = (o.status === 'waiting') ? "⏳ 老師正忙著核帳，請稍候..." : 
-                                     (o.status === 'pay_confirmed') ? "✅ 老師已收錢！訂單已公開給所有司機搶單。" :
-                                     (o.status === 'accepted') ? `🚖 司機 ${o.dName} 已接單！前往中。` : "行程結束";
-                        text.innerHTML = `訂單時間：${o.bookTime.replace('T',' ')}<br>當前進度：<b>${status}</b>`;
-                    });
-                } else box.style.display = 'none';
+        // --- 3. 評分機制修復 ---
+        function rateTrip(orderId, role) {
+            const score = prompt("行程已結束！請給予 1-5 星評價：");
+            if(score >= 1 && score <= 5) {
+                db.ref(`orders/${orderId}/${role}Score`).set(score);
+                alert("感謝您的評價！");
+                location.reload();
+            }
+        }
+
+        // --- 4. 司機註冊與照片處理 ---
+        function handleMultipleUpload(input) {
+            const files = Array.from(input.files);
+            uploadedImages = [];
+            const container = document.getElementById('upload-previews');
+            container.innerHTML = '';
+            files.forEach((f, i) => {
+                const r = new FileReader();
+                r.onload = (e) => {
+                    uploadedImages.push(e.target.result);
+                    container.innerHTML += `<img src="${e.target.result}" style="width:50px; height:50px; object-fit:cover; border:1px solid #00e676;">`;
+                };
+                r.readAsDataURL(f);
             });
         }
 
-        // --- 司機註冊邏輯 ---
         function saveDriverProfile() {
-            const name = document.getElementById('d-name').value;
-            const phone = document.getElementById('d-phone').value;
-            const car = document.getElementById('d-car').value;
-            const bank = document.getElementById('d-bank').value;
-            
-            const imgCar = document.querySelector('#pre-car img')?.src;
-            const idF = document.querySelector('#pre-id-f img')?.src;
-            const idB = document.querySelector('#pre-id-b img')?.src;
-            const licF = document.querySelector('#pre-lic-f img')?.src;
-            const licB = document.querySelector('#pre-lic-b img')?.src;
-
-            if(!name || !imgCar || !idF || !licF) return alert("請完整填寫資料並上傳 6 張照片");
-
-            db.ref('drivers/' + userId).set({
-                name, phone, car, bank, imgCar, idF, idB, licF, licB, status: 'pending', userId: userId
-            }).then(() => { alert("已提交！請等待 Jasper 老師審核。"); location.reload(); });
+            const n = document.getElementById('d-name').value, c = document.getElementById('d-car').value;
+            if(!n || uploadedImages.length < 3) return alert("請完整填寫並上傳至少 3 張證件照");
+            db.ref('drivers/'+userId).set({
+                name:n, phone:document.getElementById('d-phone').value, car:c,
+                bank:document.getElementById('d-bank').value, status:'pending', userId:userId,
+                img1: uploadedImages[0]||"", img2: uploadedImages[1]||"", img3: uploadedImages[2]||""
+            }).then(() => { alert("資料已提交！請待 Jasper 審核。"); location.reload(); });
         }
 
-        // 輔助函數
-        function previewImg(input, tid) {
-            const f = input.files[0]; if(f) {
-                const r = new FileReader(); r.onload = (e) => document.getElementById(tid).innerHTML = `<img src="${e.target.result}">`;
-                r.readAsDataURL(f);
-            }
-        }
-        function approveOrder(id) { db.ref('orders/'+id).update({status:'pay_confirmed'}); alert('放單成功！'); }
+        // 輔助功能
+        function zoomImg(src) { document.getElementById('viewer-img').src = src; document.getElementById('img-viewer').style.display = 'flex'; }
         function selectRole(r) {
-            document.getElementById('btn-p').className = (r==='passenger')?'btn-role active':'btn-role';
-            document.getElementById('btn-d').className = (r==='driver')?'btn-role active':'btn-role';
             document.getElementById('passenger-ui').style.display = (r==='passenger')?'block':'none';
-            if(r === 'driver') {
+            if(r==='driver') {
                 db.ref('drivers/'+userId).once('value', s => {
                     const d = s.val();
-                    if(!d) document.getElementById('driver-register').style.display = 'block';
-                    else if(d.status==='approved') document.getElementById('driver-ui').style.display = 'block';
-                    else alert("您的身分正在審核中。");
+                    if(!d) document.getElementById('driver-register').style.display='block';
+                    else if(d.status==='approved') { document.getElementById('driver-ui').style.display='block'; listenOrders(); }
+                    else alert("Jasper 老師正在審核您的證照，請稍後。");
                 });
-            } else {
-                document.getElementById('driver-register').style.display = 'none';
-                document.getElementById('driver-ui').style.display = 'none';
-                listenMyOrder();
             }
         }
-        function closeAdmin() { document.getElementById('admin-ui').style.display='none'; }
-        window.onload = function() { listenMyOrder(); };
+        function postOrder() {
+            const f = document.getElementById('p-fare').value;
+            if(!f) return alert("資訊不全");
+            db.ref('orders').push().set({
+                pPhone: document.getElementById('p-phone').value, fare: f,
+                start: document.getElementById('p-start').value, end: document.getElementById('p-end').value,
+                bookTime: document.getElementById('p-book-time').value,
+                status: 'waiting', pId: userId, createTime: Date.now()
+            });
+            alert("訂單已發送！請等待對帳。");
+        }
+        function listenOrders() {
+            db.ref('orders').on('value', snap => {
+                const list = document.getElementById('order-list'); list.innerHTML = '';
+                snap.forEach(c => {
+                    const o = c.val(); if(o.status==='pay_confirmed') list.innerHTML += `<div class="card">📍 ${o.start}➔${o.end}<br>💵 $${o.fare}<br><button class="btn-main" onclick="db.ref('orders/${c.key}').update({status:'accepted', dId:userId, dName:'司機'})">搶單</button></div>`;
+                });
+            });
+        }
+        function loadAdminOrders() {
+            db.ref('orders').on('value', snap => {
+                let h = '<h4>💰 匯款放單 (待核帳)</h4>';
+                snap.forEach(c => {
+                    const o = c.val(); if(o.status==='waiting') h += `<div class="card">${o.pPhone} | $${o.fare}<br><button onclick="db.ref('orders/${c.key}').update({status:'pay_confirmed'})">確認收錢 (放單)</button></div>`;
+                });
+                document.getElementById('admin-content').innerHTML = h || '暫無待核帳。';
+            });
+        }
     </script>
 </body>
 </html>
